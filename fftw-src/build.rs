@@ -12,6 +12,14 @@ const FFTW_WINDOWS_ZIP_URL: &str = "https://fftw.org/pub/fftw/fftw-3.3.5-dll64.z
 const FFTW_WINDOWS_ZIP_SHA256: [u8; 32] =
     hex!("cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f");
 
+fn cargo_target_os() -> String {
+    var("CARGO_CFG_TARGET_OS").expect("CARGO_CFG_TARGET_OS must be set by cargo")
+}
+
+fn cargo_target_env() -> Option<String> {
+    var("CARGO_CFG_TARGET_ENV").ok()
+}
+
 fn download_archive_windows(out_dir: &Path) -> Result<()> {
     if out_dir.join("libfftw3.dll").exists() && out_dir.join("libfftw3f.dll").exists() {
         return Ok(());
@@ -108,7 +116,7 @@ fn run(command: &mut Command) {
 
 fn main() {
     let out_dir = PathBuf::from(var("OUT_DIR").unwrap());
-    if cfg!(target_os = "windows") {
+    if cargo_target_os() == "windows" {
         download_archive_windows(&out_dir).unwrap();
         println!("cargo:rustc-link-search={}", out_dir.display());
         println!("cargo:rustc-link-lib=libfftw3-3");
