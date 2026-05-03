@@ -3,6 +3,8 @@
 //! See also [Using Plans] in the original document
 //! [Using Plans]: http://www.fftw.org/fftw3_doc/Using-Plans.html
 
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use crate::array::{alignment_of, AlignedAllocable, AlignedVec, Alignment};
 use crate::error::*;
 use crate::ffi::*;

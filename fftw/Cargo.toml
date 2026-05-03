@@ -18,10 +18,10 @@ intel-mkl = ["fftw-sys/intel-mkl"]
 [dependencies]
 bitflags = "2.2.1"
 lazy_static = "1.4.0"
-ndarray = "0.15.6"
+ndarray = "0.17.2"
 num-complex = "0.4.3"
 num-traits = "0.2.15"
-thiserror = "1.0.40"
+thiserror = "2.0.18"
 
 [dependencies.fftw-sys]
 path = "../fftw-sys"

@@ -20,6 +20,7 @@ pub struct AlignedVec<T> {
 /// Allocate SIMD-aligned memory of Real/Complex type
 pub trait AlignedAllocable: Zero + Clone + Copy + Sized {
     /// Allocate SIMD-aligned memory
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn alloc(n: usize) -> *mut Self;
 }
 
@@ -77,7 +78,7 @@ where
     /// Create array with `fftw_malloc` (`fftw_free` will be automatically called by `Drop` trait)
     pub fn new(n: usize) -> Self {
         let ptr = excall! { T::alloc(n) };
-        let mut vec = AlignedVec { n: n, data: ptr };
+        let mut vec = AlignedVec { n, data: ptr };
         for v in vec.iter_mut() {
             *v = T::zero();
         }
