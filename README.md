@@ -23,6 +23,7 @@ Feature flags
 - `source`: Download and compile FFTW (default)
     - (Linux, macOS) Needs a C-compiler and the `make` build tool to compile the FFTW library
     - (Windows) Downloads a precompiled binary from the [FFTW website](http://www.fftw.org/install/windows.html)
+    - (Linux -> Windows GNU cross compile) Install MinGW binutils (`dlltool`). You can override tool path with `DLLTOOL`.
 - `system`: Use the system's libfftw3 (experimental)
     - You must install FFTW before building this crate
     - For Linux systems, please install FFTW using your package manager, e.g. in Debian or Ubuntu run `apt install libfftw3-dev`
