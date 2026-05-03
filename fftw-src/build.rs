@@ -2,7 +2,7 @@ use anyhow::Result;
 use hex_literal::hex;
 use sha2::{Digest, Sha256};
 use std::env::var;
-use std::fs::{canonicalize, File};
+use std::fs::{canonicalize, copy as fs_copy, File};
 use std::io::{copy, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -20,8 +20,74 @@ fn cargo_target_env() -> Option<String> {
     var("CARGO_CFG_TARGET_ENV").ok()
 }
 
+fn command_exists(command: &str) -> bool {
+    Command::new(command).arg("--version").output().is_ok()
+}
+
+fn resolve_dlltool(target: &str) -> String {
+    if let Ok(dlltool) = var("DLLTOOL") {
+        if command_exists(&dlltool) {
+            return dlltool;
+        }
+        panic!(
+            "Could not find dlltool `{}`. Set DLLTOOL or install mingw-w64 binutils.",
+            dlltool
+        );
+    }
+
+    let mut candidates = vec![];
+    if target.starts_with("x86_64-") && target.contains("windows-gnu") {
+        candidates.push("x86_64-w64-mingw32-dlltool");
+    }
+    if target.starts_with("i686-") && target.contains("windows-gnu") {
+        candidates.push("i686-w64-mingw32-dlltool");
+    }
+    candidates.push("dlltool");
+
+    for candidate in candidates {
+        if command_exists(candidate) {
+            return candidate.to_string();
+        }
+    }
+
+    panic!("Could not find dlltool. Set DLLTOOL or install mingw-w64 binutils.")
+}
+
+fn make_import_lib_msvc(out_dir: &Path, target: &str, stem: &str) {
+    run(cc::windows_registry::find_tool(target, "lib.exe")
+        .unwrap()
+        .to_command()
+        .arg("/MACHINE:X64")
+        .arg(format!("/DEF:lib{}.def", stem))
+        .arg(format!("/OUT:lib{}.lib", stem))
+        .current_dir(out_dir))
+}
+
+fn make_import_lib_gnu(out_dir: &Path, target: &str, stem: &str) {
+    let dlltool = resolve_dlltool(target);
+    let output = format!("lib{}.dll.a", stem);
+    run(Command::new(dlltool)
+        .arg("--input-def")
+        .arg(format!("lib{}.def", stem))
+        .arg("--dllname")
+        .arg(format!("lib{}.dll", stem))
+        .arg("--output-lib")
+        .arg(&output)
+        .current_dir(out_dir));
+
+    let output_path = out_dir.join(output);
+    let cargo_link_name_output_path = out_dir.join(format!("liblib{}.dll.a", stem));
+    if !cargo_link_name_output_path.exists() {
+        fs_copy(output_path, cargo_link_name_output_path).unwrap();
+    }
+}
+
 fn download_archive_windows(out_dir: &Path) -> Result<()> {
-    if out_dir.join("libfftw3.dll").exists() && out_dir.join("libfftw3f.dll").exists() {
+    if out_dir.join("libfftw3-3.def").exists()
+        && out_dir.join("libfftw3f-3.def").exists()
+        && out_dir.join("libfftw3-3.dll").exists()
+        && out_dir.join("libfftw3f-3.dll").exists()
+    {
         return Ok(());
     }
 
@@ -41,7 +107,6 @@ fn download_archive_windows(out_dir: &Path) -> Result<()> {
     }
     let f = File::open(&archive)?;
     let mut zip = ZipArchive::new(f)?;
-    let target = var("TARGET").unwrap();
     for name in &["fftw3-3", "fftw3f-3"] {
         for ext in &["dll", "def"] {
             let filename = format!("lib{}.{}", name, ext);
@@ -49,13 +114,6 @@ fn download_archive_windows(out_dir: &Path) -> Result<()> {
             let mut f = File::create(out_dir.join(filename))?;
             copy(&mut zf, &mut f)?;
         }
-        run(cc::windows_registry::find_tool(&target, "lib.exe")
-            .unwrap()
-            .to_command()
-            .arg("/MACHINE:X64")
-            .arg(format!("/DEF:lib{}.def", name))
-            .arg(format!("/OUT:lib{}.lib", name))
-            .current_dir(out_dir))
     }
     Ok(())
 }
@@ -117,7 +175,31 @@ fn run(command: &mut Command) {
 fn main() {
     let out_dir = PathBuf::from(var("OUT_DIR").unwrap());
     if cargo_target_os() == "windows" {
+        let target = var("TARGET").unwrap();
         download_archive_windows(&out_dir).unwrap();
+
+        match cargo_target_env().as_deref() {
+            Some("msvc") => {
+                for stem in &["fftw3-3", "fftw3f-3"] {
+                    make_import_lib_msvc(&out_dir, &target, stem);
+                }
+            }
+            Some("gnu") => {
+                for stem in &["fftw3-3", "fftw3f-3"] {
+                    make_import_lib_gnu(&out_dir, &target, stem);
+                }
+            }
+            Some(env) => {
+                panic!(
+                    "Unsupported windows target env `{}` for target `{}`",
+                    env, target
+                );
+            }
+            None => {
+                panic!("CARGO_CFG_TARGET_ENV must be set for target `{}`", target);
+            }
+        }
+
         println!("cargo:rustc-link-search={}", out_dir.display());
         println!("cargo:rustc-link-lib=libfftw3-3");
         println!("cargo:rustc-link-lib=libfftw3f-3");
