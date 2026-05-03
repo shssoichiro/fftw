@@ -1,10 +1,15 @@
 use anyhow::Result;
+use sha2::{Digest, Sha256};
 use std::env::var;
 use std::fs::{canonicalize, File};
-use std::io::{copy, Write};
+use std::io::{copy, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use zip::ZipArchive;
+
+const FFTW_WINDOWS_ZIP_URL: &str = "https://fftw.org/pub/fftw/fftw-3.3.5-dll64.zip";
+const FFTW_WINDOWS_ZIP_SHA256: &str =
+    "cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f";
 
 fn download_archive_windows(out_dir: &Path) -> Result<()> {
     if out_dir.join("libfftw3.dll").exists() && out_dir.join("libfftw3f.dll").exists() {
@@ -13,14 +18,23 @@ fn download_archive_windows(out_dir: &Path) -> Result<()> {
 
     let archive = out_dir.join("fftw_windows.zip");
     if !archive.exists() {
-        // Download
-        let mut conn = ftp::FtpStream::connect("ftp.fftw.org:21")?;
-        conn.login("anonymous", "anonymous")?;
-        conn.cwd("pub/fftw")?;
-        let buf = conn.simple_retr("fftw-3.3.5-dll64.zip")?.into_inner();
-        // TODO calc checksum
+        let response = ureq::get(FFTW_WINDOWS_ZIP_URL).call()?;
+        let mut buf = Vec::new();
+        response.into_reader().read_to_end(&mut buf)?;
+
+        let digest = Sha256::digest(&buf);
+        let actual = format!("{:x}", digest);
+        if !actual.eq_ignore_ascii_case(FFTW_WINDOWS_ZIP_SHA256) {
+            anyhow::bail!(
+                "SHA-256 mismatch for {}: expected {}, got {}",
+                FFTW_WINDOWS_ZIP_URL,
+                FFTW_WINDOWS_ZIP_SHA256,
+                actual
+            );
+        }
+
         let mut f = File::create(&archive)?;
-        f.write(&buf)?;
+        f.write_all(&buf)?;
     }
     let f = File::open(&archive)?;
     let mut zip = ZipArchive::new(f)?;

@@ -16,5 +16,6 @@ links = "fftw3"
 anyhow = "1.0.70"
 cc = "1.0"
 fs_extra = "~1.3.0"
-ftp = "3.0"
+sha2 = "0.10.9"
+ureq = { version = "2.12.1", default-features = false, features = ["tls"] }
 zip = "0.6"
