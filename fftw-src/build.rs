@@ -1,15 +1,16 @@
 use anyhow::Result;
+use hex_literal::hex;
 use sha2::{Digest, Sha256};
 use std::env::var;
 use std::fs::{canonicalize, File};
-use std::io::{copy, Read, Write};
+use std::io::{copy, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use zip::ZipArchive;
 
 const FFTW_WINDOWS_ZIP_URL: &str = "https://fftw.org/pub/fftw/fftw-3.3.5-dll64.zip";
-const FFTW_WINDOWS_ZIP_SHA256: &str =
-    "cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f";
+const FFTW_WINDOWS_ZIP_SHA256: [u8; 32] =
+    hex!("cfd88dc0e8d7001115ea79e069a2c695d52c8947f5b4f3b7ac54a192756f439f");
 
 fn download_archive_windows(out_dir: &Path) -> Result<()> {
     if out_dir.join("libfftw3.dll").exists() && out_dir.join("libfftw3f.dll").exists() {
@@ -18,19 +19,13 @@ fn download_archive_windows(out_dir: &Path) -> Result<()> {
 
     let archive = out_dir.join("fftw_windows.zip");
     if !archive.exists() {
-        let response = ureq::get(FFTW_WINDOWS_ZIP_URL).call()?;
-        let mut buf = Vec::new();
-        response.into_reader().read_to_end(&mut buf)?;
-
+        let buf = ureq::get(FFTW_WINDOWS_ZIP_URL)
+            .call()?
+            .body_mut()
+            .read_to_vec()?;
         let digest = Sha256::digest(&buf);
-        let actual = format!("{:x}", digest);
-        if !actual.eq_ignore_ascii_case(FFTW_WINDOWS_ZIP_SHA256) {
-            anyhow::bail!(
-                "SHA-256 mismatch for {}: expected {}, got {}",
-                FFTW_WINDOWS_ZIP_URL,
-                FFTW_WINDOWS_ZIP_SHA256,
-                actual
-            );
+        if digest != FFTW_WINDOWS_ZIP_SHA256 {
+            anyhow::bail!("SHA-256 mismatch for {}", FFTW_WINDOWS_ZIP_URL);
         }
 
         let mut f = File::create(&archive)?;
@@ -74,10 +69,10 @@ fn build_unix(out_dir: &Path) {
     )
     .unwrap();
     if !out_dir.join("lib/libfftw3.a").exists() {
-        build_fftw(&[], &out_src_dir, &out_dir);
+        build_fftw(&[], &out_src_dir, out_dir);
     }
     if !out_dir.join("lib/libfftw3f.a").exists() {
-        build_fftw(&["--enable-single"], &out_src_dir, &out_dir);
+        build_fftw(&["--enable-single"], &out_src_dir, out_dir);
     }
 }
 
@@ -89,12 +84,12 @@ fn build_fftw(flags: &[&str], src_dir: &Path, out_dir: &Path) {
             .arg("--disable-doc")
             .arg(format!("--prefix={}", out_dir.display()))
             .args(flags)
-            .current_dir(&src_dir),
+            .current_dir(src_dir),
     );
     run(Command::new("make")
         .arg(format!("-j{}", var("NUM_JOBS").unwrap()))
-        .current_dir(&src_dir));
-    run(Command::new("make").arg("install").current_dir(&src_dir));
+        .current_dir(src_dir));
+    run(Command::new("make").arg("install").current_dir(src_dir));
 }
 
 fn run(command: &mut Command) {
