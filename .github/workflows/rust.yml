@@ -63,6 +63,26 @@ jobs:
         command: test
         args: --manifest-path=fftw/Cargo.toml --features=${{ matrix.feature }} --no-default-features
 
+  linux-cross-windows-gnu:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install MinGW toolchain
+      run: sudo apt update && sudo apt install -y mingw-w64
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        target: x86_64-pc-windows-gnu
+        override: true
+    - uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: >
+          --manifest-path=fftw/Cargo.toml
+          --no-default-features
+          --features source
+          --target x86_64-pc-windows-gnu
+
   check-format:
     runs-on: ubuntu-latest
     steps:
